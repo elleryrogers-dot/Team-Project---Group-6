@@ -2,9 +2,10 @@
 import kagglehub
 import pandas as pd
 import os
+import numpy as np
+import matplotlib.pyplot as plt
 
 #-----------------------------------------------------------------------------------------------
-
 # Download dataset
 path = kagglehub.dataset_download("alitaqishah/spotify-wrapped-2025-top-songs-and-artists")
 print("Path to dataset files:", path)
@@ -13,7 +14,7 @@ print("Path to dataset files:", path)
 file_path = os.path.join(path, "spotify_wrapped_2025_top50_songs.csv")
 df = pd.read_csv(file_path, encoding='latin1')
 
-# Clean columns names
+# Clean column names
 df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
 # Rename columns
@@ -22,120 +23,140 @@ df = df.rename(columns={
     'duration_seconds': 'duration_sec'
 })
 
-# Convert data to numeric values
-df['streams'] = pd.to_numeric(df['streams'], errors='coerce')
-df['bpm'] = pd.to_numeric(df['bpm'], errors='coerce')
-df['duration_sec'] = pd.to_numeric(df['duration_sec'], errors='coerce')
+# See all columns in case you want to check them
+print("Columns:", df.columns.tolist())
 
+# Convert data to numeric values
+numeric_cols = ['streams', 'bpm', 'duration_sec', 'danceability', 'energy']
+for col in numeric_cols:
+    if col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+
+# Clean genre labels
+df['primary_genre'] = df['primary_genre'].astype(str).str.strip().str.lower()
+
+# Drop rows missing the main fields
 df = df.dropna(subset=['streams', 'bpm', 'duration_sec', 'primary_genre'])
+
 print(df.head())
 
-#import analysis libraries
-import matplotlib.pyplot as plt
-import numpy as np
+# Create log-transformed streams for better correlation analysis
+df['log_streams'] = np.log1p(df['streams'])
 
 #-----------------------------------------------------------------------------------------------
-# Experiment 1: Duration vs Streams
+# EXPERIMENT 1: Duration vs Streams
 x = df['duration_sec']
-y = df['streams']
+y = df['log_streams']
 
-# Scatter plot
 plt.figure()
 plt.scatter(x, y)
 
-# Axes Labels
 plt.xlabel("Duration (seconds)")
-plt.ylabel("Streams (billions)")
+plt.ylabel("Log(Streams)")
 plt.title("Duration vs Streams (Spotify Top 50 Songs 2025)")
 
-#Add linear trendline
+# Add linear trendline
 m, b = np.polyfit(x, y, 1)
-plt.plot(x, m*x + b)
+plt.plot(x, m * x + b)
 
 # Calculate correlation coefficient
 correlation = np.corrcoef(x, y)[0, 1]
-print("Correlation (Duration vs Streams):", correlation)
+print("Correlation (Duration vs Log Streams):", correlation)
 
-# Graph Output
 plt.show()
 
-#-------------------------------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------------------
 # EXPERIMENT 2: BPM vs Streams
 x_bpm = df['bpm']
-y_streams = df['streams']
+y_streams = df['log_streams']
 
-#Scatter plot
 plt.figure()
 plt.scatter(x_bpm, y_streams)
 
-#Axes Labels
 plt.xlabel("BPM")
-plt.ylabel("Streams (billions)")
+plt.ylabel("Log(Streams)")
 plt.title("BPM vs Streams (Spotify Top 50 Songs 2025)")
 
 # Add linear trendline
 m, b = np.polyfit(x_bpm, y_streams, 1)
-plt.plot(x_bpm, m*x_bpm + b)
+plt.plot(x_bpm, m * x_bpm + b)
 
 # Calculate correlation coefficient
 correlation_bpm = np.corrcoef(x_bpm, y_streams)[0, 1]
-print("Correlation (BPM vs Streams):", correlation_bpm)
+print("Correlation (BPM vs Log Streams):", correlation_bpm)
 
-#Graph Output
 plt.show()
 
-# ----------------------------------------------------------------------------------------------------
-# EXPERIMENT 3: Genre vs Avg Streams
+#-----------------------------------------------------------------------------------------------
+# EXPERIMENT 3: Genre vs Average Streams
 
-# Average streams per genre
+# Simplify similar genres into larger categories
+def simplify_genre(g):
+    if 'k-pop' in g:
+        return 'k-pop'
+    elif 'pop' in g:
+        return 'pop'
+    elif 'hip-hop' in g or 'rap' in g:
+        return 'hip-hop/rap'
+    elif 'rock' in g or 'punk' in g:
+        return 'rock/punk'
+    elif 'r&b' in g or 'soul' in g:
+        return 'r&b/soul'
+    elif 'country' in g:
+        return 'country'
+    elif 'reggaeton' in g:
+        return 'reggaeton'
+    elif 'afrobeats' in g:
+        return 'afrobeats'
+    elif 'indie' in g:
+        return 'indie'
+    else:
+        return g
+
+df['genre_clean'] = df['primary_genre'].apply(simplify_genre)
+
+# Average streams per cleaned genre
 genre_avg = (
-    df.groupby('primary_genre')['streams']
+    df.groupby('genre_clean')['streams']
     .mean()
-    .sort_values()  # sorts data categories ascending
+    .sort_values()
 )
 
 # Plot bar chart
-plt.figure()
+plt.figure(figsize=(12, 6))
 genre_avg.plot(kind='bar')
 
 plt.xlabel("Genre")
 plt.ylabel("Average Streams (billions)")
 plt.title("Average Streams by Genre (Spotify Top 50 Songs 2025)")
 
-plt.xticks(rotation=45)  # rotate labels so they don’t overlap
-
+plt.xticks(rotation=30, ha='right')
+plt.tight_layout()
 plt.show()
 
-#----------------------------------------------------------------------------------------------------
-# Danceability vs Streams
-import numpy as np
-import matplotlib.pyplot as plt
+#-----------------------------------------------------------------------------------------------
+# EXPERIMENT 4: Danceability vs Streams
+if 'danceability' in df.columns:
+    df_dance = df.dropna(subset=['danceability', 'streams'])
 
-# Ensure numeric
-df['danceability'] = pd.to_numeric(df['danceability'], errors='coerce')
-df['streams'] = pd.to_numeric(df['streams'], errors='coerce')
+    x = df_dance['danceability']
+    y = np.log1p(df_dance['streams'])
 
-# Drop missing values
-df_clean = df.dropna(subset=['danceability', 'streams'])
+    plt.figure()
+    plt.scatter(x, y)
 
-# Log transform streams (IMPORTANT for better correlation)
-x = df_clean['danceability']
-y = np.log1p(df_clean['streams'])
+    plt.xlabel("Danceability")
+    plt.ylabel("Log(Streams)")
+    plt.title("Danceability vs Streams")
 
-# Scatter plot
-plt.figure()
-plt.scatter(x, y)
+    m, b = np.polyfit(x, y, 1)
+    plt.plot(x, m * x + b)
 
-plt.xlabel("Danceability")
-plt.ylabel("Log(Streams)")
-plt.title("Danceability vs Streams")
+    corr_dance = np.corrcoef(x, y)[0, 1]
+    print("Correlation (Danceability vs Log Streams):", corr_dance)
 
-# Trendline
-m, b = np.polyfit(x, y, 1)
-plt.plot(x, m*x + b)
+    plt.show()
+else:
+    print("Column 'danceability' not found in dataset.")
 
-# Correlation
-corr = np.corrcoef(x, y)[0, 1]
-print("Correlation (Danceability vs Log Streams):", corr)
 
-plt.show()
