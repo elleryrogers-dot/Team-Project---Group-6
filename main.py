@@ -10,21 +10,16 @@ import matplotlib.pyplot as plt
 path = kagglehub.dataset_download("alitaqishah/spotify-wrapped-2025-top-songs-and-artists")
 print("Path to dataset files:", path)
 
-# File selection
 file_path = os.path.join(path, "spotify_wrapped_2025_top50_songs.csv")
 df = pd.read_csv(file_path, encoding='latin1')
 
-# Clean column names
+# Clean/rename columns
 df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
-
-# Rename columns
+df['primary_genre'] = df['primary_genre'].astype(str).str.strip().str.lower()
 df = df.rename(columns={
     'streams_2025_billions': 'streams',
     'duration_seconds': 'duration_sec'
 })
-
-# See all columns in case you want to check them
-print("Columns:", df.columns.tolist())
 
 # Convert data to numeric values
 numeric_cols = ['streams', 'bpm', 'duration_sec', 'danceability', 'energy']
@@ -32,13 +27,7 @@ for col in numeric_cols:
     if col in df.columns:
         df[col] = pd.to_numeric(df[col], errors='coerce')
 
-# Clean genre labels
-df['primary_genre'] = df['primary_genre'].astype(str).str.strip().str.lower()
-
-# Drop rows missing the main fields
 df = df.dropna(subset=['streams', 'bpm', 'duration_sec', 'primary_genre'])
-
-print(df.head())
 
 # Create log-transformed streams for better correlation analysis
 df['log_streams'] = np.log1p(df['streams'])
@@ -67,7 +56,7 @@ if 'danceability' in df.columns:
     plt.show()
 else:
     print("Column 'danceability' not found in dataset.")
-
+#Included in event that danceability was not considered for the top 50 songs
 #-----------------------------------------------------------------------------------------------
 # EXPERIMENT 2: BPM vs Streams
 x_bpm = df['bpm']
@@ -118,7 +107,7 @@ def simplify_genre(g):
 
 df['genre_clean'] = df['primary_genre'].apply(simplify_genre)
 
-# Average streams per updated genre
+# Average streams per genre
 genre_avg = (
     df.groupby('genre_clean')['streams']
     .mean()
